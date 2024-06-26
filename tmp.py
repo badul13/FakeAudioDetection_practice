@@ -130,15 +130,18 @@ tuner = RandomSearch(MyHyperModel(), objective='val_accuracy', max_trials=10, ex
 reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, min_lr=0.00001)
 
 # 모델 체크포인트 저장
-checkpoint = ModelCheckpoint('best_model.keras', monitor='val_accuracy', save_best_only=True, mode='max')
+checkpoint = ModelCheckpoint('best_model_weights.h5', monitor='val_accuracy', save_best_only=True, mode='max', save_weights_only=True)
+
 
 # 튜닝 및 모델 학습
 tuner.search(train_data, train_labels, epochs=10, validation_split=0.2, callbacks=[reduce_lr, checkpoint])
 
-# 최적의 하이퍼파라미터로 모델 훈련
+# 최적의 모델 가중치만 로드
 best_model = tuner.get_best_models(num_models=1)[0]
-history = best_model.fit(train_data, train_labels, epochs=10, batch_size=32, validation_split=0.2,
-                         callbacks=[checkpoint])
+best_model.load_weights('best_model_weights.h5')
+
+# 옵티마이저를 수동으로 설정하여 모델 컴파일
+best_model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
 
 # 모델 평가
 loss, accuracy = best_model.evaluate(test_data, test_labels)
