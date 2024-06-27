@@ -30,11 +30,12 @@ def pad_or_trim(audio_data, max_len=16000):
 def load_dataset(base_path, target_sr=16000, max_len=16000, augment=False):
     data = []
     labels = []
-    for label, folder in enumerate(['real', 'fake']):
+    for label, folder in enumerate(['Real', 'Fake']):
         folder_path = os.path.join(base_path, folder)
         for file_name in os.listdir(folder_path):
             if file_name.endswith('.wav'):
                 file_path = os.path.join(folder_path, file_name)
+                print(file_path)
                 audio_data, sr = load_audio_data(file_path, target_sr)
                 audio_data = pad_or_trim(audio_data, max_len)
                 data.append(audio_data)
@@ -47,7 +48,8 @@ def load_dataset(base_path, target_sr=16000, max_len=16000, augment=False):
     return np.array(data), np.array(labels)
 
 # 데이터셋 로드 및 저장
-base_path = 'C:/Users/Jeong Taehyeon/OneDrive/바탕 화면/archive'
+# base_path = 'C:/Users/Jeong Taehyeon/OneDrive/바탕 화면/archive'
+base_path = '/home/irlab/deepVoice/home/irlab/deepVoice /data/Audio'
 data, labels = load_dataset(base_path, augment=True)
 np.save('data.npy', data)
 np.save('labels.npy', labels)

@@ -3,22 +3,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.layers import Conv1D, MaxPooling1D, Flatten, Dense, Input, Dropout
-from tensorflow.keras.models import Model
+from tensorflow.keras.models import Model, load_model
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau
 from keras_tuner.tuners import RandomSearch
 from keras_tuner import HyperModel
-from preprocessing import load_audio_data, pad_or_trim, load_dataset
 
 # 전처리된 데이터를 저장할 파일 경로
 data_file = 'data.npy'
 labels_file = 'labels.npy'
-
-def preprocess_data():
-    base_path = 'C:/Users/Jeong Taehyeon/OneDrive/바탕 화면/archive'
-    data, labels = load_dataset(base_path, augment=True)
-    np.save(data_file, data)
-    np.save(labels_file, labels)
-    return data, labels
 
 # 하이퍼모델 정의
 class MyHyperModel(HyperModel):
@@ -54,8 +46,7 @@ if os.path.exists(data_file) and os.path.exists(labels_file):
     data = np.load(data_file)
     labels = np.load(labels_file)
 else:
-    print("Preprocessing data...")
-    data, labels = preprocess_data()
+    raise FileNotFoundError("Preprocessed data not found. Please ensure the data.npy and labels.npy files exist.")
 
 # 데이터셋 분할
 train_data, test_data, train_labels, test_labels = train_test_split(data, labels, test_size=0.2, random_state=42)
@@ -80,11 +71,11 @@ tuner.search(train_data, train_labels, epochs=10, validation_split=0.2, callback
 best_model = tuner.get_best_models(num_models=1)[0]
 
 # 최적의 가중치 로드 (옵티마이저 상태 제외)
-best_model.load_weights('best_model.weights.h5')
-
-# 모델 평가
-loss, accuracy = best_model.evaluate(test_data, test_labels)
-print(f'Pre-test Accuracy: {accuracy * 100:.2f}%')
+weights_path = 'best_model.weights.h5'
+if os.path.exists(weights_path):
+    best_model.load_weights(weights_path)
+else:
+    print(f"Warning: {weights_path} not found. Proceeding with the current model weights.")
 
 # 학습 과정 시각화
 history = best_model.fit(train_data, train_labels, epochs=10, batch_size=32, validation_split=0.2, callbacks=[checkpoint])
@@ -104,24 +95,4 @@ final_model_path = 'final_model.h5'
 best_model.save(final_model_path)
 print(f'Model saved to {final_model_path}')
 
-# 예측 함수
-# def predict(audio_path):
-#     audio_data, sr = load_audio_data(audio_path)
-#     audio_data = pad_or_trim(audio_data, 16000)
-#     audio_data = np.expand_dims(audio_data, axis=(0, -1))
-#
-#     prediction = best_model.predict(audio_data)
-#     label = 'Human' if prediction < 0.5 else 'AI Generated'
-#     print(f'FileName: {audio_path}')
-#     print(f'Prediction: {label}')
-#     print(f'Confidence: {prediction[0][0]:.2f}')
-#
-# # 디렉토리 내 모든 파일 예측 함수
-# def predict_all(directory):
-#     for filename in os.listdir(directory):
-#         if filename.endswith('.wav'):  # .wav 파일만 예측
-#             filepath = os.path.join(directory, filename)
-#             predict(filepath)
-#
-# # 예시 예측 실행
-# predict_all('C:/Users/Jeong Taehyeon/OneDrive/바탕 화면/archive/predict/')
+
