@@ -110,7 +110,7 @@ if __name__ == "__main__":
                                  save_weights_only=True)
 
     # 튜닝 및 모델 학습
-    tuner.search(train_generator, epochs=10, validation_data=train_generator.get_validation_data(),
+    tuner.search(train_generator, epochs=1, validation_data=train_generator.get_validation_data(),
                  callbacks=[reduce_lr, checkpoint])
 
     # 최적의 하이퍼파라미터로 모델 훈련
@@ -126,7 +126,7 @@ if __name__ == "__main__":
     # 학습 과정
     history = best_model.fit(
         train_generator,
-        epochs=10,
+        epochs=1,
         validation_data=train_generator.get_validation_data(),
         callbacks=[checkpoint]
     )

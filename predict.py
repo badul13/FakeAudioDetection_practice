@@ -40,9 +40,9 @@ def predict_all(directory):
                 'fake': confidence,
                 'real': 1 - confidence
             })
-            print(f'FileName: {filepath}')
-            print(f'Prediction: {label}')
-            print(f'Confidence: {confidence:.2f}')
+            # print(f'FileName: {filepath}')
+            # print(f'Prediction: {label}')
+            # print(f'Confidence: {confidence:.3f}')
 
     # 예측 결과를 sample_submission.csv 파일에 저장
     df = pd.DataFrame(results)
