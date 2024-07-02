@@ -1,13 +1,15 @@
 import numpy as np
 import librosa
 import os
+import pandas as pd
+from tqdm import tqdm
 
-# 오디오 데이터를 로드하고 전처리하는 함수
+
 def load_audio_data(audio_path, target_sr=16000):
     y, sr = librosa.load(audio_path, sr=target_sr)
     return y, sr
 
-# 오디오 데이터를 증강하는 함수
+
 def augment_audio(audio_data):
     # 시간 축소
     time_stretch = librosa.effects.time_stretch(audio_data, rate=np.random.uniform(0.8, 1.2))
@@ -18,7 +20,7 @@ def augment_audio(audio_data):
     pitch_shift = librosa.effects.pitch_shift(audio_data, sr=16000, n_steps=np.random.randint(-5, 5))
     return [time_stretch, audio_data_noise, pitch_shift]
 
-# 오디오 데이터를 패딩하거나 자르는 함수
+
 def pad_or_trim(audio_data, max_len=16000):
     if len(audio_data) < max_len:
         audio_data = np.pad(audio_data, (0, max_len - len(audio_data)), mode='constant')
@@ -26,32 +28,63 @@ def pad_or_trim(audio_data, max_len=16000):
         audio_data = audio_data[:max_len]
     return audio_data
 
-# 데이터셋 준비 함수
-def load_dataset(base_path, target_sr=16000, max_len=16000, augment=False):
+
+def process_and_save_batch(df_batch, base_path, target_sr, max_len, augment, data_file, labels_file, total_processed):
     data = []
     labels = []
-    for label, folder in enumerate(['Real', 'Fake']):
-        folder_path = os.path.join(base_path, folder)
-        for file_name in os.listdir(folder_path):
-            if file_name.endswith('.wav'):
-                file_path = os.path.join(folder_path, file_name)
-                print(file_path)
-                audio_data, sr = load_audio_data(file_path, target_sr)
-                audio_data = pad_or_trim(audio_data, max_len)
-                data.append(audio_data)
-                labels.append(label)
-                if augment:
-                    augmented_data = augment_audio(audio_data)
-                    augmented_data = [pad_or_trim(aug_data, max_len) for aug_data in augmented_data]  # 패딩/자르기 적용
-                    data.extend(augmented_data)
-                    labels.extend([label] * len(augmented_data))
-    return np.array(data), np.array(labels)
+    for _, row in df_batch.iterrows():
+        file_path = os.path.join(base_path, row['path'])
+        audio_data, sr = load_audio_data(file_path, target_sr)
+        audio_data = pad_or_trim(audio_data, max_len)
+        data.append(audio_data)
+        labels.append(1 if row['label'] == 'fake' else 0)
+        if augment and row['label'] == 'real':
+            augmented_data = augment_audio(audio_data)
+            augmented_data = [pad_or_trim(aug_data, max_len) for aug_data in augmented_data]
+            data.extend(augmented_data)
+            labels.extend([0] * len(augmented_data))
+
+        total_processed += 1
+        print(f'\rProcessed {total_processed} files', end='')
+
+    data = np.array(data, dtype=np.float32)
+    labels = np.array(labels)
+
+    if os.path.exists(data_file):
+        np.save(data_file, np.concatenate((np.load(data_file), data)))
+        np.save(labels_file, np.concatenate((np.load(labels_file), labels)))
+    else:
+        np.save(data_file, data)
+        np.save(labels_file, labels)
+
+    return total_processed
+
 
 # 데이터셋 로드 및 저장
-# base_path = 'C:/Users/Jeong Taehyeon/OneDrive/바탕 화면/archive'
-base_path = '/home/irlab/deepVoice/home/irlab/deepVoice /data/Audio'
-data, labels = load_dataset(base_path, augment=True)
-np.save('data.npy', data)
-np.save('labels.npy', labels)
+base_path = 'F:/FADdata'
+train_csv_path = 'F:/FADdata/train.csv'
+data_file = 'data.npy'
+labels_file = 'labels.npy'
 
-print('preprocessing finished.')
+# 기존 파일 삭제 (새로운 처리 시작)
+if os.path.exists(data_file):
+    os.remove(data_file)
+if os.path.exists(labels_file):
+    os.remove(labels_file)
+
+df = pd.read_csv(train_csv_path)
+batch_size = 1000  # 조정 가능
+total_files = len(df)
+total_processed = 0
+
+print(f"Total files to process: {total_files}")
+
+for i in tqdm(range(0, len(df), batch_size), desc="Processing batches", unit="batch"):
+    df_batch = df.iloc[i:i + batch_size]
+    total_processed = process_and_save_batch(df_batch, base_path, target_sr=16000, max_len=16000,
+                                             augment=True, data_file=data_file, labels_file=labels_file,
+                                             total_processed=total_processed)
+    percent_complete = (total_processed / total_files) * 100
+    print(f'\rProgress: {percent_complete:.2f}% ({total_processed}/{total_files} files)', end='')
+
+print('\nPreprocessing finished.')
