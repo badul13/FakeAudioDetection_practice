@@ -7,6 +7,7 @@ from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau
 from keras_tuner.tuners import RandomSearch
 from keras_tuner import HyperModel
 from tensorflow.keras.utils import Sequence
+from tensorflow.keras.optimizers import Adam
 
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
@@ -39,16 +40,19 @@ class DataGenerator(Sequence):
 
         batch_x = self.data[batch_indices]
         batch_y = self.labels[batch_indices]
+        # 레이블을 [AI확률, 사람확률] 형태로 변경
+        batch_y = np.column_stack((batch_y, 1 - batch_y))
         return np.expand_dims(batch_x, axis=-1), batch_y
 
     def get_validation_data(self):
         if self.is_training:
             val_x = self.data[self.val_indices]
             val_y = self.labels[self.val_indices]
+            # 검증 데이터의 레이블도 [AI확률, 사람확률] 형태로 변경
+            val_y = np.column_stack((val_y, 1 - val_y))
             return np.expand_dims(val_x, axis=-1), val_y
         else:
             return None, None
-
 
 class MyHyperModel(HyperModel):
     def build(self, hp):
@@ -71,12 +75,13 @@ class MyHyperModel(HyperModel):
         x = Flatten()(x)
         x = Dense(units=hp.Int('units', min_value=128, max_value=512, step=128), activation='relu')(x)
         x = Dropout(0.5)(x)
-        output = Dense(1, activation='sigmoid')(x)
+        output = Dense(2, activation='sigmoid')(x)
 
         model = Model(inputs=audio_input, outputs=output)
-        model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+        model.compile(optimizer=Adam(hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])),
+                      loss='binary_crossentropy',
+                      metrics=['accuracy'])
         return model
-
 
 if __name__ == "__main__":
     data_file = 'data.npy'
