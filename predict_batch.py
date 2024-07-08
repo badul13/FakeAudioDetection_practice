@@ -39,8 +39,10 @@ def predict_all(directory, batch_size=32):
         audio_data_batch = np.expand_dims(audio_data_batch, axis=-1)
         predictions = batch_predict(audio_data_batch)
 
+        # 각 파일에 대해 예측 결과 저장
         for filename, confidence in zip(batch_filenames, predictions):
-            ai_prob, human_prob = confidence
+            ai_prob = confidence[0]  # 모델의 첫 번째 출력이 AI 확률
+            human_prob = confidence[1]  # 모델의 두 번째 출력이 실제 확률
             results.append({
                 'id': filename.split('.')[0],
                 'ai_prob': ai_prob,
