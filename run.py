@@ -3,14 +3,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.layers import Conv1D, MaxPooling1D, Flatten, Dense, Input, Dropout, LSTM, GRU, \
-    GlobalAveragePooling1D
+    GlobalAveragePooling1D, Concatenate
 from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.utils import Sequence
 from sklearn.metrics import f1_score, hamming_loss, accuracy_score, average_precision_score
-from keras_tuner import HyperModel, RandomSearch
-from tensorflow.keras.wrappers.scikit_learn import KerasClassifier
+from keras_tuner import HyperModel, RandomSearch, Objective
+from scikeras.wrappers import KerasClassifier
 from sklearn.inspection import permutation_importance
 import shap
 
@@ -46,9 +46,8 @@ class DataGenerator(Sequence):
 
         batch_x = self.data[batch_indices]
         batch_y = self.labels[batch_indices]
-        # AI와 사람 레이블을 독립적으로 생성
         ai_labels = batch_y
-        human_labels = 1 - batch_y  # 훈련 데이터에서는 여전히 상호 배타적
+        human_labels = 1 - batch_y
         return np.expand_dims(batch_x, axis=-1), {'ai_output': ai_labels, 'human_output': human_labels}
 
     def get_validation_data(self):
@@ -61,6 +60,7 @@ class DataGenerator(Sequence):
         else:
             return None, None
 
+
 class CNNHyperModel(HyperModel):
     def build(self, hp):
         audio_input = Input(shape=(16000, 1))
@@ -68,51 +68,95 @@ class CNNHyperModel(HyperModel):
                    kernel_size=hp.Choice('kernel_size_1', values=[3, 5]), activation='relu')(audio_input)
         x = MaxPooling1D(2)(x)
         x = Dropout(0.2)(x)
-        x = Conv1D(filters=hp.Int('filters_2', min_value=32, max_value=128, step=32),
-                   kernel_size=hp.Choice('kernel_size_2', values=[3, 5]), activation='relu')(x)
-        x = GlobalAveragePooling1D()(x)
-        x = Dense(units=hp.Int('dense_units', min_value=64, max_value=256, step=64), activation='relu')(x)
-        x = Dropout(0.5)(x)
-        output = Dense(2, activation='sigmoid')(x)
 
-        model = Model(inputs=audio_input, outputs=output)
+        x = Conv1D(filters=hp.Int('filters_2', min_value=65, max_value=128, step=65),
+                   kernel_size=hp.Choice('kernel_size_2', values=[3, 5]), activation='relu')(x)
+        x = MaxPooling1D(2)(x)
+        x = Dropout(0.2)(x)
+
+        x = Conv1D(filters=hp.Int('filters_3', min_value=64, max_value=256, step=64),
+                   kernel_size=hp.Choice('kernel_size_3', values=[3, 5]), activation='relu')(x)
+        x = MaxPooling1D(2)(x)
+        x = Dropout(0.2)(x)
+
+        x = Flatten()(x)
+        x = Dense(units=hp.Int('units', min_value=128, max_value=512, step=128), activation='relu')(x)
+        x = Dropout(0.5)(x)
+        # 각 클래스에 대해 독립적인 시그모이드 출력
+        ai_output = Dense(1, activation='sigmoid', name='ai_output')(x)
+        human_output = Dense(1, activation='sigmoid', name='human_output')(x)
+
+        model = Model(inputs=audio_input, outputs=[ai_output, human_output])
         model.compile(optimizer=Adam(hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])),
-                      loss='binary_crossentropy',
-                      metrics=['accuracy'])
+                      loss={'ai_output': 'binary_crossentropy', 'human_output': 'binary_crossentropy'},
+                      metrics={'ai_output': 'accuracy', 'human_output': 'accuracy'})
+        print("Building CNN model...")
         return model
 
 
 class LSTMHyperModel(HyperModel):
     def build(self, hp):
         audio_input = Input(shape=(16000, 1))
-        x = LSTM(units=hp.Int('lstm_units', min_value=32, max_value=128, step=32),
-                 return_sequences=True)(audio_input)
-        x = LSTM(units=hp.Int('lstm_units_2', min_value=16, max_value=64, step=16))(x)
-        x = Dense(units=hp.Int('dense_units', min_value=32, max_value=128, step=32), activation='relu')(x)
-        x = Dropout(0.5)(x)
-        output = Dense(2, activation='sigmoid')(x)
 
-        model = Model(inputs=audio_input, outputs=output)
+        # 첫 번째 LSTM 레이어
+        x = LSTM(units=hp.Int('lstm_units_1', min_value=64, max_value=256, step=64),
+                 return_sequences=True)(audio_input)
+
+        # 추가 LSTM 레이어
+        for i in range(hp.Int('num_lstm_layers', min_value=1, max_value=3)):
+            x = LSTM(units=hp.Int(f'lstm_units_{i + 2}', min_value=32, max_value=128, step=32),
+                     return_sequences=True if i < (hp.Int('num_lstm_layers') - 1) else False)(x)
+
+        # Dense 레이어
+        x = Dense(units=hp.Int('dense_units', min_value=64, max_value=256, step=64), activation='relu')(x)
+        x = Dropout(rate=hp.Float('dropout', min_value=0.1, max_value=0.5, step=0.1))(x)
+
+        # Output 레이어
+        ai_output = Dense(1, activation='sigmoid', name='ai_output')(x)
+        human_output = Dense(1, activation='sigmoid', name='human_output')(x)
+
+        # 모델 구성
+        model = Model(inputs=audio_input, outputs=[ai_output, human_output])
+
+        # 컴파일
         model.compile(optimizer=Adam(hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])),
-                      loss='binary_crossentropy',
-                      metrics=['accuracy'])
+                      loss={'ai_output': 'binary_crossentropy', 'human_output': 'binary_crossentropy'},
+                      metrics=['accuracy', 'accuracy'])
+
+        print("Building LSTM model...")
         return model
 
 
 class GRUHyperModel(HyperModel):
     def build(self, hp):
         audio_input = Input(shape=(16000, 1))
-        x = GRU(units=hp.Int('gru_units', min_value=32, max_value=128, step=32),
-                return_sequences=True)(audio_input)
-        x = GRU(units=hp.Int('gru_units_2', min_value=16, max_value=64, step=16))(x)
-        x = Dense(units=hp.Int('dense_units', min_value=32, max_value=128, step=32), activation='relu')(x)
-        x = Dropout(0.5)(x)
-        output = Dense(2, activation='sigmoid')(x)
 
-        model = Model(inputs=audio_input, outputs=output)
+        # 첫 번째 GRU 레이어
+        x = GRU(units=hp.Int('gru_units_1', min_value=64, max_value=256, step=64),
+                return_sequences=True)(audio_input)
+
+        # 추가 GRU 레이어
+        for i in range(hp.Int('num_gru_layers', min_value=1, max_value=3)):
+            x = GRU(units=hp.Int(f'gru_units_{i + 2}', min_value=32, max_value=128, step=32),
+                    return_sequences=True if i < (hp.Int('num_gru_layers') - 1) else False)(x)
+
+        # Dense 레이어
+        x = Dense(units=hp.Int('dense_units', min_value=64, max_value=256, step=64), activation='relu')(x)
+        x = Dropout(rate=hp.Float('dropout', min_value=0.1, max_value=0.5, step=0.1))(x)
+
+        # Output 레이어
+        ai_output = Dense(1, activation='sigmoid', name='ai_output')(x)
+        human_output = Dense(1, activation='sigmoid', name='human_output')(x)
+
+        # 모델 구성
+        model = Model(inputs=audio_input, outputs=[ai_output, human_output])
+
+        # 컴파일
         model.compile(optimizer=Adam(hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])),
-                      loss='binary_crossentropy',
-                      metrics=['accuracy'])
+                      loss={'ai_output': 'binary_crossentropy', 'human_output': 'binary_crossentropy'},
+                      metrics=['accuracy', 'accuracy'])
+
+        print("Building GRU model...")
         return model
 
 
@@ -129,12 +173,14 @@ class EnsembleHyperModel(HyperModel):
         x = Dense(hp.Int('ensemble_dense_1', min_value=32, max_value=128, step=32), activation='relu')(x)
         x = Dropout(hp.Float('ensemble_dropout', min_value=0.1, max_value=0.5, step=0.1))(x)
         x = Dense(hp.Int('ensemble_dense_2', min_value=16, max_value=64, step=16), activation='relu')(x)
-        ensemble_output = Dense(2, activation='sigmoid')(x)
+        ai_output = Dense(1, activation='sigmoid', name='ai_output')(x)
+        human_output = Dense(1, activation='sigmoid', name='human_output')(x)
 
-        ensemble_model = Model(inputs=inputs, outputs=ensemble_output)
+        ensemble_model = Model(inputs=inputs, outputs=[ai_output, human_output])
         ensemble_model.compile(optimizer=Adam(hp.Choice('ensemble_lr', values=[1e-3, 1e-4, 1e-5])),
-                               loss='binary_crossentropy',
-                               metrics=['accuracy'])
+                               loss={'ai_output': 'binary_crossentropy', 'human_output': 'binary_crossentropy'},
+                               metrics=['accuracy', 'accuracy'])
+        print("Building ENSEMBLE model...")
         return ensemble_model
 
 
@@ -163,8 +209,8 @@ def perform_permutation_importance(model, X, y):
 
 
 def perform_shap_analysis(model, X):
-    explainer = shap.DeepExplainer(model, X[:100])  # Use a subset of data for background
-    shap_values = explainer.shap_values(X[:1000])  # Explain first 1000 predictions
+    explainer = shap.DeepExplainer(model, X[:100])
+    shap_values = explainer.shap_values(X[:1000])
     return shap_values
 
 
@@ -178,35 +224,34 @@ if __name__ == "__main__":
     train_generator = DataGenerator(data_file, labels_file, batch_size=32, is_training=True)
     test_generator = DataGenerator(data_file, labels_file, batch_size=32, is_training=False)
 
-    # Train and tune individual models
     base_models = []
     model_classes = [CNNHyperModel, LSTMHyperModel, GRUHyperModel]
 
     for i, model_class in enumerate(model_classes):
         tuner = RandomSearch(
             model_class(),
-            objective='val_accuracy',
+            objective = Objective('ai_output_accuracy', 'human_output_accuracy'),
             max_trials=10,
             executions_per_trial=2,
-            directory=f'hyperparam_tuning_model_{i}'
+            directory=f'hyperparam_tuning_model_{i}',
+            max_consecutive_failed_trials=5
         )
         tuner.search(train_generator, epochs=10, validation_data=train_generator.get_validation_data())
         best_model = tuner.get_best_models(num_models=1)[0]
         base_models.append(best_model)
 
-    # Tune ensemble model
     ensemble_tuner = RandomSearch(
         EnsembleHyperModel(base_models),
-        objective='val_accuracy',
+        objective = Objective('ai_output_accuracy', 'human_output_accuracy'),
         max_trials=10,
         executions_per_trial=2,
-        directory='hyperparam_tuning_ensemble'
+        directory='hyperparam_tuning_ensemble',
+        max_consecutive_failed_trials=5
     )
 
     ensemble_tuner.search(train_generator, epochs=10, validation_data=train_generator.get_validation_data())
     best_ensemble_model = ensemble_tuner.get_best_models(num_models=1)[0]
 
-    # Train the best ensemble model
     checkpoint = ModelCheckpoint('final_model.keras', monitor='val_accuracy', save_best_only=True, mode='max')
     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, min_lr=0.00001)
 
@@ -231,7 +276,6 @@ if __name__ == "__main__":
     for metric, value in eval_results.items():
         print(f'{metric}: {value:.4f}')
 
-    # Perform feature importance analysis
     print("Performing permutation importance analysis...")
     perm_importance = perform_permutation_importance(best_ensemble_model, val_x, val_y)
 
