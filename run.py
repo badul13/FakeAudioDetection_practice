@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.layers import Conv1D, MaxPooling1D, Flatten, Dense, Input, Dropout, LSTM, GRU, \
     GlobalAveragePooling1D, Concatenate
-from tensorflow.keras.models import Model
+from tensorflow.keras.models import Model, load_model
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.utils import Sequence
@@ -186,13 +186,11 @@ class EnsembleHyperModel(HyperModel):
 
 def evaluate_multi_label(y_true, y_pred, threshold=0.5):
     y_pred_binary = (y_pred > threshold).astype(int)
-
     micro_f1 = f1_score(y_true, y_pred_binary, average='micro')
     macro_f1 = f1_score(y_true, y_pred_binary, average='macro')
     hl = hamming_loss(y_true, y_pred_binary)
     exact_match = accuracy_score(y_true, y_pred_binary)
     avg_precision = average_precision_score(y_true, y_pred)
-
     return {
         'micro_f1': micro_f1,
         'macro_f1': macro_f1,
@@ -201,22 +199,20 @@ def evaluate_multi_label(y_true, y_pred, threshold=0.5):
         'avg_precision': avg_precision
     }
 
-
 def perform_permutation_importance(model, X, y):
     wrapped_model = KerasClassifier(build_fn=lambda: model)
     results = permutation_importance(wrapped_model, X, y, n_repeats=10, random_state=42)
     return results
-
 
 def perform_shap_analysis(model, X):
     explainer = shap.DeepExplainer(model, X[:100])
     shap_values = explainer.shap_values(X[:1000])
     return shap_values
 
-
 if __name__ == "__main__":
     data_file = 'data.npy'
     labels_file = 'labels.npy'
+    checkpoint_path = 'model_checkpoint.h5'
 
     if not os.path.exists(data_file) or not os.path.exists(labels_file):
         raise FileNotFoundError("Preprocessed data not found. Please ensure the data.npy and labels.npy files exist.")
@@ -231,33 +227,46 @@ if __name__ == "__main__":
         tuner = RandomSearch(
             model_class(),
             objective = Objective('ai_output_accuracy', 'human_output_accuracy'),
-            max_trials=10,
-            executions_per_trial=2,
+            # max_trials=10,
+            max_trials=5,
+            # executions_per_trial=2,
+            executions_per_trial=1,
             directory=f'hyperparam_tuning_model_{i}',
             max_consecutive_failed_trials=5
         )
-        tuner.search(train_generator, epochs=10, validation_data=train_generator.get_validation_data())
+        # tuner.search(train_generator, epochs=10, validation_data=train_generator.get_validation_data())
+        tuner.search(train_generator, epochs=5, validation_data=train_generator.get_validation_data())
         best_model = tuner.get_best_models(num_models=1)[0]
         base_models.append(best_model)
 
     ensemble_tuner = RandomSearch(
         EnsembleHyperModel(base_models),
         objective = Objective('ai_output_accuracy', 'human_output_accuracy'),
-        max_trials=10,
-        executions_per_trial=2,
+        # max_trials=10,
+        max_trials=5,
+        # executions_per_trial=2,
+        executions_per_trial=1,
         directory='hyperparam_tuning_ensemble',
         max_consecutive_failed_trials=5
     )
 
-    ensemble_tuner.search(train_generator, epochs=10, validation_data=train_generator.get_validation_data())
+    # ensemble_tuner.search(train_generator, epochs=10, validation_data=train_generator.get_validation_data())
+    ensemble_tuner.search(train_generator, epochs=5, validation_data=train_generator.get_validation_data())
     best_ensemble_model = ensemble_tuner.get_best_models(num_models=1)[0]
 
-    checkpoint = ModelCheckpoint('final_model.keras', monitor='val_accuracy', save_best_only=True, mode='max')
+    checkpoint = ModelCheckpoint(checkpoint_path, monitor='val_human_output_accuracy', save_best_only=True, save_freq='epoch', mode='max')
     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, min_lr=0.00001)
+
+    initial_epoch = 0
+    if os.path.exists(checkpoint_path):
+        best_ensemble_model = load_model(checkpoint_path)
+        initial_epoch = len(os.listdir(checkpoint_path))  # 로드한 모델의 마지막 에포크 번호
 
     history = best_ensemble_model.fit(
         train_generator,
-        epochs=50,
+        # epochs=50,
+        epochs=5,
+        initial_epoch=initial_epoch,
         validation_data=train_generator.get_validation_data(),
         callbacks=[checkpoint, reduce_lr]
     )

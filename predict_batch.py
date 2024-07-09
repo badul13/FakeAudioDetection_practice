@@ -45,8 +45,8 @@ def predict_all(directory, batch_size=32):
             human_prob = confidence[1]  # 모델의 두 번째 출력이 실제 확률
             results.append({
                 'id': filename.split('.')[0],
-                'ai_prob': ai_prob,
-                'human_prob': human_prob
+                'fake': ai_prob,
+                'real': human_prob
             })
 
         # 진행도 출력
