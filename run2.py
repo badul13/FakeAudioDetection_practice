@@ -160,148 +160,70 @@ class GRUHyperModel(HyperModel):
 class EnsembleHyperModel(HyperModel):
     def __init__(self, base_models):
         self.base_models = base_models
-        super().__init__()
 
     def build(self, hp):
-        inputs = Input(shape=(16000, 1))
-        outputs = [model(inputs) for model in self.base_models]
+        audio_input = Input(shape=(16000, 1))
 
-        x = Concatenate()(outputs)
+        base_model_outputs = []
+        for model in self.base_models:
+            base_model = load_model(model)
+            for layer in base_model.layers:
+                layer.trainable = False
+            base_model_outputs.append(base_model(audio_input))
 
-        x = Dense(hp.Int('ensemble_dense_1', min_value=32, max_value=128, step=32), activation='relu')(x)
-        x = Dropout(hp.Float('ensemble_dropout', min_value=0.1, max_value=0.5, step=0.1))(x)
-
-        x = Dense(hp.Int('ensemble_dense_2', min_value=16, max_value=64, step=16), activation='relu')(x)
+        concatenated = Concatenate()(base_model_outputs)
+        x = Dense(units=hp.Int('dense_units', min_value=64, max_value=256, step=64), activation='relu')(concatenated)
+        x = Dropout(rate=hp.Float('dropout', min_value=0.1, max_value=0.5, step=0.1))(x)
 
         ai_output = Dense(1, activation='sigmoid', name='ai_output')(x)
         human_output = Dense(1, activation='sigmoid', name='human_output')(x)
 
-        ensemble_model = Model(inputs=inputs, outputs=[ai_output, human_output])
-        ensemble_model.compile(optimizer=Adam(hp.Choice('ensemble_lr', values=[1e-3, 1e-4, 1e-5])),
-                               loss={'ai_output': 'binary_crossentropy', 'human_output': 'binary_crossentropy'},
-                               metrics=['accuracy', 'accuracy'])
-        print("Building ENSEMBLE model...")
-        return ensemble_model
+        model = Model(inputs=audio_input, outputs=[ai_output, human_output])
+        model.compile(optimizer=Adam(hp.Choice('learning_rate', values=[1e-3, 1e-4])),
+                      loss={'ai_output': 'binary_crossentropy', 'human_output': 'binary_crossentropy'},
+                      metrics=['accuracy', 'accuracy'])
+
+        print("Building Ensemble model...")
+        return model
 
 
-def evaluate_multi_label(y_true, y_pred, threshold=0.5):
-    y_pred_binary = (y_pred > threshold).astype(int)
-    micro_f1 = f1_score(y_true, y_pred_binary, average='micro')
-    macro_f1 = f1_score(y_true, y_pred_binary, average='macro')
-    hl = hamming_loss(y_true, y_pred_binary)
-    exact_match = accuracy_score(y_true, y_pred_binary)
-    avg_precision = average_precision_score(y_true, y_pred)
-    return {
-        'micro_f1': micro_f1,
-        'macro_f1': macro_f1,
-        'hamming_loss': hl,
-        'exact_match_ratio': exact_match,
-        'avg_precision': avg_precision
-    }
+# 데이터 파일 경로
+data_file = 'data.npy'
+labels_file = 'labels.npy'
 
-def perform_permutation_importance(model, X, y):
-    wrapped_model = KerasClassifier(build_fn=lambda: model)
-    results = permutation_importance(wrapped_model, X, y, n_repeats=10, random_state=42)
-    return results
+# 데이터 생성기 초기화
+train_generator = DataGenerator(data_file, labels_file, batch_size=32, is_training=True)
 
-def perform_shap_analysis(model, X):
-    explainer = shap.DeepExplainer(model, X[:100])
-    shap_values = explainer.shap_values(X[:1000])
-    return shap_values
+# 각 모델 하이퍼파라미터 튜닝 및 최적 모델 저장
+base_models = []
+model_classes = [CNNHyperModel, LSTMHyperModel, GRUHyperModel]
 
-if __name__ == "__main__":
-    data_file = 'data.npy'
-    labels_file = 'labels.npy'
-    checkpoint_path = 'model_checkpoint.h5'
-
-    if not os.path.exists(data_file) or not os.path.exists(labels_file):
-        raise FileNotFoundError("Preprocessed data not found. Please ensure the data.npy and labels.npy files exist.")
-
-    train_generator = DataGenerator(data_file, labels_file, batch_size=32, is_training=True)
-    test_generator = DataGenerator(data_file, labels_file, batch_size=32, is_training=False)
-
-    base_models = []
-    model_classes = [CNNHyperModel, LSTMHyperModel, GRUHyperModel]
-
-    for i, model_class in enumerate(model_classes):
-        tuner = RandomSearch(
-            model_class(),
-            objective = Objective('ai_output_accuracy', 'human_output_accuracy'),
-            max_trials=7,
-            executions_per_trial=2,
-            directory=f'hyperparam_tuning_model_{i}',
-            max_consecutive_failed_trials=5
-        )
-        tuner.search(train_generator, epochs=1, validation_data=train_generator.get_validation_data())
-        best_model = tuner.get_best_models(num_models=1)[0]
-        base_models.append(best_model)
-
-    ensemble_tuner = RandomSearch(
-        EnsembleHyperModel(base_models),
-        objective = Objective('ai_output_accuracy', 'human_output_accuracy'),
+for i, model_class in enumerate(model_classes):
+    print(f"Starting hyperparameter search for {model_class.__name__}...")
+    tuner = RandomSearch(
+        model_class(),
+        objective=Objective('val_ai_output_accuracy', direction='max'),
         max_trials=7,
         executions_per_trial=2,
-        directory='hyperparam_tuning_ensemble',
+        directory=f'hyperparam_tuning_model_{i}',
         max_consecutive_failed_trials=5
     )
+    tuner.search(train_generator, epochs=7, validation_data=train_generator.get_validation_data(),
+                 callbacks=[ReduceLROnPlateau(), EarlyStopping(patience=3)])
+    best_model = tuner.get_best_models(num_models=1)[0]
+    best_model.save(f'best_model_{model_class.__name__}.keras')
+    base_models.append(f'best_model_{model_class.__name__}.keras')
 
-    ensemble_tuner.search(train_generator, epochs=1, validation_data=train_generator.get_validation_data())
-    best_ensemble_model = ensemble_tuner.get_best_models(num_models=1)[0]
-
-    checkpoint = ModelCheckpoint(checkpoint_path, monitor='val_human_output_accuracy', save_best_only=True, save_freq='epoch', mode='max')
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, min_lr=0.00001)
-
-    early_stopping = EarlyStopping(
-        monitor='val_loss',
-        patience=2,
-        restore_best_weights=True,
-        verbose=1
-    )
-
-    initial_epoch = 0
-    if os.path.exists(checkpoint_path):
-        best_ensemble_model = load_model(checkpoint_path)
-        initial_epoch = len(os.listdir(checkpoint_path))
-
-    history = best_ensemble_model.fit(
-        train_generator,
-        epochs=1,
-        initial_epoch=initial_epoch,
-        validation_data=train_generator.get_validation_data(),
-        callbacks=[checkpoint, reduce_lr, early_stopping]
-    )
-
-    plt.plot(history.history['accuracy'], label='accuracy')
-    plt.plot(history.history['val_accuracy'], label='val_accuracy')
-    plt.xlabel('Epoch')
-    plt.ylabel('Accuracy')
-    plt.legend(loc='lower right')
-    plt.show()
-
-    val_x, val_y = train_generator.get_validation_data()
-    val_pred = best_ensemble_model.predict(val_x)
-    eval_results = evaluate_multi_label(val_y, val_pred)
-
-    for metric, value in eval_results.items():
-        print(f'{metric}: {value:.4f}')
-
-    print("Performing permutation importance analysis...")
-    perm_importance = perform_permutation_importance(best_ensemble_model, val_x, val_y)
-
-    plt.figure(figsize=(10, 6))
-    plt.bar(range(len(perm_importance.importances_mean)), perm_importance.importances_mean)
-    plt.title('Permutation Importance')
-    plt.xlabel('Feature')
-    plt.ylabel('Importance')
-    plt.show()
-
-    print("Performing SHAP analysis...")
-    shap_values = perform_shap_analysis(best_ensemble_model, val_x)
-
-    plt.figure()
-    shap.summary_plot(shap_values, val_x)
-    plt.show()
-
-    final_model_path = 'final_model.keras'
-    best_ensemble_model.save(final_model_path)
-    print(f'Model saved to {final_model_path}')
+# 앙상블 모델 하이퍼파라미터 튜닝
+ensemble_tuner = RandomSearch(
+    EnsembleHyperModel(base_models),
+    objective=Objective('val_ai_output_accuracy', direction='max'),
+    max_trials=7,
+    executions_per_trial=2,
+    directory='hyperparam_tuning_ensemble',
+    max_consecutive_failed_trials=5
+)
+ensemble_tuner.search(train_generator, epochs=7, validation_data=train_generator.get_validation_data(),
+                      callbacks=[ReduceLROnPlateau(), EarlyStopping(patience=3)])
+best_ensemble_model = ensemble_tuner.get_best_models(num_models=1)[0]
+best_ensemble_model.save('final_model.keras')
