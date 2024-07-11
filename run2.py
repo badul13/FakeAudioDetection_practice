@@ -19,13 +19,19 @@ os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
     try:
-        for gpu in gpus:
-            tf.config.experimental.set_memory_growth(gpu, True)
-            print("TensorFlow version:", tf.__version__)
-            print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
-            print("Is GPU available: ", tf.test.is_gpu_available())
+        # GPU 메모리 제한 설정
+        tf.config.experimental.set_virtual_device_configuration(
+            gpus[0],
+            [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=4096)]
+        )
+        logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+        print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
     except RuntimeError as e:
         print(e)
+
+    print("TensorFlow version:", tf.__version__)
+    print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
+    print("Is GPU available: ", tf.test.is_gpu_available())
 
 
 class DataGenerator(Sequence):
@@ -80,7 +86,7 @@ class CNNHyperModel(HyperModel):
         x = MaxPooling1D(2)(x)
         x = Dropout(0.2)(x)
 
-        x = Conv1D(filters=hp.Int('filters_2', min_value=65, max_value=128, step=65),
+        x = Conv1D(filters=hp.Int('filters_2', min_value=64, max_value=128, step=64),
                    kernel_size=hp.Choice('kernel_size_2', values=[3, 5]), activation='relu')(x)
         x = MaxPooling1D(2)(x)
         x = Dropout(0.2)(x)
@@ -109,14 +115,14 @@ class LSTMHyperModel(HyperModel):
     def build(self, hp):
         audio_input = Input(shape=(16000, 1))
 
-        x = LSTM(units=hp.Int('lstm_units_1', min_value=64, max_value=256, step=64),
+        x = LSTM(units=hp.Int('lstm_units_1', min_value=32, max_value=128, step=32),
                  return_sequences=True)(audio_input)
 
         for i in range(hp.Int('num_lstm_layers', min_value=1, max_value=3)):
             x = LSTM(units=hp.Int(f'lstm_units_{i + 2}', min_value=32, max_value=128, step=32),
-                     return_sequences=True if i < (hp.Int('num_lstm_layers') - 1) else False)(x)
+                     return_sequences=True if i < (hp.Int('num_lstm_layers', 1, 2) - 1) else False)(x)
 
-        x = Dense(units=hp.Int('dense_units', min_value=64, max_value=256, step=64), activation='relu')(x)
+        x = Dense(units=hp.Int('dense_units', min_value=32, max_value=128, step=32), activation='relu')(x)
         x = Dropout(rate=hp.Float('dropout', min_value=0.1, max_value=0.5, step=0.1))(x)
 
         ai_output = Dense(1, activation='sigmoid', name='ai_output')(x)
@@ -135,14 +141,14 @@ class GRUHyperModel(HyperModel):
     def build(self, hp):
         audio_input = Input(shape=(16000, 1))
 
-        x = GRU(units=hp.Int('gru_units_1', min_value=64, max_value=256, step=64),
+        x = GRU(units=hp.Int('gru_units_1', min_value=32, max_value=128, step=32),
                 return_sequences=True)(audio_input)
 
         for i in range(hp.Int('num_gru_layers', min_value=1, max_value=3)):
             x = GRU(units=hp.Int(f'gru_units_{i + 2}', min_value=32, max_value=128, step=32),
-                    return_sequences=True if i < (hp.Int('num_gru_layers') - 1) else False)(x)
+                    return_sequences=True if i < (hp.Int('num_gru_layers', 1, 2) - 1) else False)(x)
 
-        x = Dense(units=hp.Int('dense_units', min_value=64, max_value=256, step=64), activation='relu')(x)
+        x = Dense(units=hp.Int('dense_units', min_value=32, max_value=128, step=32), activation='relu')(x)
         x = Dropout(rate=hp.Float('dropout', min_value=0.1, max_value=0.5, step=0.1))(x)
 
         ai_output = Dense(1, activation='sigmoid', name='ai_output')(x)
@@ -172,7 +178,7 @@ class EnsembleHyperModel(HyperModel):
             base_model_outputs.append(base_model(audio_input))
 
         concatenated = Concatenate()(base_model_outputs)
-        x = Dense(units=hp.Int('dense_units', min_value=64, max_value=256, step=64), activation='relu')(concatenated)
+        x = Dense(units=hp.Int('dense_units', min_value=32, max_value=32, step=32), activation='relu')(concatenated)
         x = Dropout(rate=hp.Float('dropout', min_value=0.1, max_value=0.5, step=0.1))(x)
 
         ai_output = Dense(1, activation='sigmoid', name='ai_output')(x)
@@ -192,7 +198,7 @@ data_file = 'data.npy'
 labels_file = 'labels.npy'
 
 # 데이터 생성기 초기화
-train_generator = DataGenerator(data_file, labels_file, batch_size=32, is_training=True)
+train_generator = DataGenerator(data_file, labels_file, batch_size=16, is_training=True)
 
 # 각 모델 하이퍼파라미터 튜닝 및 최적 모델 저장
 base_models = []
@@ -205,11 +211,16 @@ for i, model_class in enumerate(model_classes):
         objective=Objective('val_ai_output_accuracy', direction='max'),
         max_trials=7,
         executions_per_trial=2,
+        # max_trials=1,
+        # executions_per_trial=1,
         directory=f'hyperparam_tuning_model_{i}',
-        max_consecutive_failed_trials=5
+        # max_consecutive_failed_trials=5
     )
-    tuner.search(train_generator, epochs=7, validation_data=train_generator.get_validation_data(),
-                 callbacks=[ReduceLROnPlateau(), EarlyStopping(patience=3)])
+    tuner.search(train_generator, epochs=1, validation_data=train_generator.get_validation_data(),
+                 # callbacks=[
+                 #     ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=1e-6, verbose=1),
+                 #     EarlyStopping(monitor='val_loss', patience=10, verbose=1, restore_best_weights=True)]
+                 )
     best_model = tuner.get_best_models(num_models=1)[0]
     best_model.save(f'best_model_{model_class.__name__}.keras')
     base_models.append(f'best_model_{model_class.__name__}.keras')
@@ -220,10 +231,15 @@ ensemble_tuner = RandomSearch(
     objective=Objective('val_ai_output_accuracy', direction='max'),
     max_trials=7,
     executions_per_trial=2,
+    # max_trials=1,
+    # executions_per_trial=1,
     directory='hyperparam_tuning_ensemble',
-    max_consecutive_failed_trials=5
+    # max_consecutive_failed_trials=5
 )
-ensemble_tuner.search(train_generator, epochs=7, validation_data=train_generator.get_validation_data(),
-                      callbacks=[ReduceLROnPlateau(), EarlyStopping(patience=3)])
+ensemble_tuner.search(train_generator, epochs=1, validation_data=train_generator.get_validation_data(),
+                      # callbacks=[
+                      #     ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=1e-6, verbose=1),
+                      #     EarlyStopping(monitor='val_loss', patience=10, verbose=1, restore_best_weights=True)]
+                      )
 best_ensemble_model = ensemble_tuner.get_best_models(num_models=1)[0]
 best_ensemble_model.save('final_model.keras')
