@@ -4,18 +4,7 @@ import os
 import pandas as pd
 from tqdm import tqdm
 from scipy.signal import butter, lfilter
-import tensorflow as tf
 
-gpus = tf.config.experimental.list_physical_devices('GPU')
-if gpus:
-    try:
-        for gpu in gpus:
-            tf.config.experimental.set_memory_growth(gpu, True)
-            print("TensorFlow version:", tf.__version__)
-            print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
-            print("Is GPU available: ", tf.test.is_gpu_available())
-    except RuntimeError as e:
-        print(e)
 
 # 오디오 데이터를 로드하는 함수
 def load_audio_data(audio_path, target_sr=16000):

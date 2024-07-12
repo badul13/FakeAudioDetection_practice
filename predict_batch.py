@@ -4,14 +4,15 @@ import pandas as pd
 from tensorflow.keras.models import load_model
 import tensorflow as tf
 
+# GPU 설정
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
     try:
         for gpu in gpus:
             tf.config.experimental.set_memory_growth(gpu, True)
-            print("TensorFlow version:", tf.__version__)
-            print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
-            print("Is GPU available: ", tf.test.is_gpu_available())
+        print("TensorFlow version:", tf.__version__)
+        print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
+        print("Is GPU available: ", tf.test.is_gpu_available())
     except RuntimeError as e:
         print(e)
 
@@ -31,43 +32,43 @@ def load_preprocessed_data():
     else:
         raise FileNotFoundError(f"{preprocessed_data_file} 파일이 존재하지 않습니다.")
 
-# 배치 예측 함수
-def batch_predict(audio_data_batch):
-    predictions = model.predict(audio_data_batch)
-    return predictions
+# 개별 예측 함수
+def predict(audio_data):
+    audio_data = np.expand_dims(audio_data, axis=0)  # 배치 차원 추가
+    audio_data = np.expand_dims(audio_data, axis=-1)  # 채널 차원 추가
+    prediction = model.predict(audio_data)
+    return prediction  # 예측값 반환
 
-# 디렉토리 내 모든 파일 예측 함수
-def predict_all(directory, batch_size=32):
+# 모든 파일 예측 함수
+def predict_all(directory):
     preprocessed_data = load_preprocessed_data()
     results = []
+    # num_files = 50000
     filenames = [filename for filename in os.listdir(directory) if filename.endswith('.ogg')]
     num_files = len(filenames)
-    num_batches = (num_files + batch_size - 1) // batch_size
 
-    for batch_idx in range(num_batches):
-        batch_filenames = filenames[batch_idx * batch_size: (batch_idx + 1) * batch_size]
-        audio_data_batch = np.array(
-            [preprocessed_data[i] for i in range(batch_idx * batch_size, min((batch_idx + 1) * batch_size, num_files))])
-        audio_data_batch = np.expand_dims(audio_data_batch, axis=-1)
-        predictions = batch_predict(audio_data_batch)
+    for i in range(num_files):
+        filename = f'TEST_{i:05d}.ogg'
+        audio_data = preprocessed_data[i]
+        prediction = predict(audio_data)
 
-        # 각 파일에 대해 예측 결과 저장
-        for filename, confidence in zip(batch_filenames, predictions):
-            ai_prob = confidence[0]  # 모델의 첫 번째 출력이 AI 확률
-            human_prob = confidence[1]  # 모델의 두 번째 출력이 실제 확률
-            results.append({
-                'id': filename.split('.')[0],
-                'fake': ai_prob,
-                'real': human_prob
-            })
+        fake_prob = float(prediction[0][0])  # ai_output
+        real_prob = float(prediction[1][0])  # human_output
 
-        # 진행도 출력
-        print(f'Progress: {batch_idx + 1}/{num_batches} ({((batch_idx + 1) / num_batches) * 100:.2f}%)')
+        results.append({
+            'id': filename.split('.')[0],
+            'fake': fake_prob,
+            'real': real_prob
+        })
+
+        # 진행도 출력 (매 100개 파일마다)
+        if (i + 1) % 100 == 0:
+            print(f'Progress: {i + 1}/{num_files} ({((i + 1) / num_files) * 100:.2f}%)')
 
     # 예측 결과를 sample_submission.csv 파일에 저장
     df = pd.DataFrame(results)
-    df.to_csv('F:/FADdata/sample_submission.csv', index=False)
-    print(f'Predictions saved to F:/FADdata/sample_submission.csv')
+    df.to_csv('../fakeAudio/sample_submission.csv', index=False, float_format='%.8f')
+    print(f'Predictions saved to ../fakeAudio/sample_submission.csv')
 
-# 예시 예측 실행
-predict_all('F:/FADdata/test')
+# 예측 실행
+predict_all('../fakeDetection/data/test')
