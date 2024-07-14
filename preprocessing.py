@@ -100,46 +100,46 @@ train_data_file = 'data.npy'
 train_labels_file = 'labels.npy'
 test_data_file = 'test_data.npy'
 
-# 기존 파일 삭제 (새로운 처리 시작)
-if os.path.exists(train_data_file):
-    os.remove(train_data_file)
-if os.path.exists(train_labels_file):
-    os.remove(train_labels_file)
-if os.path.exists(test_data_file):
-    os.remove(test_data_file)
+# # 기존 파일 삭제 (새로운 처리 시작)
+# if os.path.exists(train_data_file):
+#     os.remove(train_data_file)
+# if os.path.exists(train_labels_file):
+#     os.remove(train_labels_file)
+# if os.path.exists(test_data_file):
+#     os.remove(test_data_file)
 
-# 학습 데이터 전처리
-df = pd.read_csv(train_csv_path)
-batch_size = 1000
-total_files = len(df)
-total_processed = 0
-
-print(f"Total train files to process: {total_files}")
-
-for i in tqdm(range(0, len(df), batch_size), desc="Processing train batches", unit="batch"):
-    df_batch = df.iloc[i:i + batch_size]
-    total_processed = process_and_save_batch(df_batch, base_path, target_sr=16000, max_len=16000,
-                                             augment=True, data_file=train_data_file, labels_file=train_labels_file,
-                                             total_processed=total_processed)
-    percent_complete = (total_processed / total_files) * 100
-    print(f'\rProgress: {percent_complete:.2f}% ({total_processed}/{total_files} files)', end='')
-
-print('\nTrain preprocessing finished.')
-
-# # 테스트 데이터 전처리
-# df_test = pd.read_csv(test_csv_path)
+# # 학습 데이터 전처리
+# df = pd.read_csv(train_csv_path)
 # batch_size = 1000
-# total_test_files = len(df_test)
-# total_processed_test = 0
+# total_files = len(df)
+# total_processed = 0
 #
-# print(f"Total test files to process: {total_test_files}")
+# print(f"Total train files to process: {total_files}")
 #
-# for i in tqdm(range(0, len(df_test), batch_size), desc="Processing test batches", unit="batch"):
-#     df_batch_test = df_test.iloc[i:i + batch_size]
-#     total_processed_test = process_and_save_batch(df_batch_test, test_base_path, target_sr=16000, max_len=16000,
-#                                                   augment=False, data_file=test_data_file, labels_file=None,
-#                                                   total_processed=total_processed_test)
-#     percent_complete = (total_processed_test / total_test_files) * 100
-#     print(f'\rProgress: {percent_complete:.2f}% ({total_processed_test}/{total_test_files} files)', end='')
+# for i in tqdm(range(0, len(df), batch_size), desc="Processing train batches", unit="batch"):
+#     df_batch = df.iloc[i:i + batch_size]
+#     total_processed = process_and_save_batch(df_batch, base_path, target_sr=16000, max_len=16000,
+#                                              augment=True, data_file=train_data_file, labels_file=train_labels_file,
+#                                              total_processed=total_processed)
+#     percent_complete = (total_processed / total_files) * 100
+#     print(f'\rProgress: {percent_complete:.2f}% ({total_processed}/{total_files} files)', end='')
 #
-# print('\nTest preprocessing finished.')
+# print('\nTrain preprocessing finished.')
+
+# 테스트 데이터 전처리
+df_test = pd.read_csv(test_csv_path)
+batch_size = 1000
+total_test_files = len(df_test)
+total_processed_test = 0
+
+print(f"Total test files to process: {total_test_files}")
+
+for i in tqdm(range(0, len(df_test), batch_size), desc="Processing test batches", unit="batch"):
+    df_batch_test = df_test.iloc[i:i + batch_size]
+    total_processed_test = process_and_save_batch(df_batch_test, test_base_path, target_sr=16000, max_len=16000,
+                                                  augment=False, data_file=test_data_file, labels_file=None,
+                                                  total_processed=total_processed_test)
+    percent_complete = (total_processed_test / total_test_files) * 100
+    print(f'\rProgress: {percent_complete:.2f}% ({total_processed_test}/{total_test_files} files)', end='')
+
+print('\nTest preprocessing finished.')
