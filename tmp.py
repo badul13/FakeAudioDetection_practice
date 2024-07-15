@@ -53,7 +53,8 @@ def process_and_save_batch(df_batch, base_path, target_sr, max_len, augment, dat
     for _, row in df_batch.iterrows():
         # 파일 경로 생성 수정
         if 'test' in base_path:
-            file_path = os.path.join(base_path, row['path'].strip('./').split('/')[-1])
+            filename = row['path'].split('/')[-1].replace('TEST', 'claer_TEST').replace('.ogg', '.wav')
+            file_path = os.path.join(base_path, filename)
         else:
             file_path = os.path.join(base_path, row['path'].strip('./'))
 
@@ -94,38 +95,14 @@ def process_and_save_batch(df_batch, base_path, target_sr, max_len, augment, dat
 # 데이터셋 로드 및 저장
 base_path = '../fakeDetection/data'
 train_csv_path = '../fakeDetection/data/train.csv'
-# test_base_path = '../fakeDetection/data/test'
 test_base_path = '../fakeDetection/data/test_nonBack'
 test_csv_path = '../fakeDetection/data/test.csv'
 train_data_file = 'data.npy'
 train_labels_file = 'labels.npy'
 test_data_file = 'test_data.npy'
 
-# # 기존 파일 삭제 (새로운 처리 시작)
-# if os.path.exists(train_data_file):
-#     os.remove(train_data_file)
-# if os.path.exists(train_labels_file):
-#     os.remove(train_labels_file)
 if os.path.exists(test_data_file):
     os.remove(test_data_file)
-
-# # 학습 데이터 전처리
-# df = pd.read_csv(train_csv_path)
-# batch_size = 1000
-# total_files = len(df)
-# total_processed = 0
-#
-# print(f"Total train files to process: {total_files}")
-#
-# for i in tqdm(range(0, len(df), batch_size), desc="Processing train batches", unit="batch"):
-#     df_batch = df.iloc[i:i + batch_size]
-#     total_processed = process_and_save_batch(df_batch, base_path, target_sr=16000, max_len=16000,
-#                                              augment=True, data_file=train_data_file, labels_file=train_labels_file,
-#                                              total_processed=total_processed)
-#     percent_complete = (total_processed / total_files) * 100
-#     print(f'\rProgress: {percent_complete:.2f}% ({total_processed}/{total_files} files)', end='')
-
-# print('\nTrain preprocessing finished.')
 
 # 테스트 데이터 전처리
 df_test = pd.read_csv(test_csv_path)

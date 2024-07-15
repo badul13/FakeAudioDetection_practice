@@ -65,7 +65,7 @@ def predict_all(directory):
     return results
 
 # 결과를 저장하는 함수
-def save_results(results, output_file='../fakeAudio/sample_submission_1.csv'):
+def save_results(results, output_file='../fakeAudio/sample_submission_2.csv'):
     df = pd.DataFrame(results)
     df.to_csv(output_file, index=False)
     print(f'Results saved to {output_file}')
