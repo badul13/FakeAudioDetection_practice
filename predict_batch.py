@@ -38,10 +38,12 @@ def extract_number(filename):
     return int(filename.split('_')[1].split('.')[0])
 
 # 단일 파일 예측 함수
+from scipy.special import expit
 def predict_single(audio_data):
-    prediction = model.predict(np.expand_dims(np.expand_dims(audio_data, axis=-1), axis=0))
-    ai_prob, human_prob = prediction[0][0], prediction[1][0]
-    return ai_prob, human_prob
+    audio_data = np.expand_dims(audio_data, axis=0)
+    audio_data = np.expand_dims(audio_data, axis=-1)
+    ai_prob, human_prob = model.predict(audio_data)
+    return expit(ai_prob[0]), expit(human_prob[0])
 
 # 디렉토리 내 모든 파일 예측 함수
 def predict_all(directory):
@@ -53,7 +55,6 @@ def predict_all(directory):
     for filename in tqdm(filenames, desc="Predicting"):
         audio_data = preprocessed_data[extract_number(filename)]
         ai_prob, human_prob = predict_single(audio_data)
-
         result = {
             'id': filename.split('.')[0],
             'fake': float(ai_prob),
@@ -64,12 +65,13 @@ def predict_all(directory):
     return results
 
 # 결과를 저장하는 함수
-def save_results(results, output_file='../fakeAudio/sample_submission.csv'):
+def save_results(results, output_file='../fakeAudio/sample_submission_1.csv'):
     df = pd.DataFrame(results)
     df.to_csv(output_file, index=False)
     print(f'Results saved to {output_file}')
 
 # 예측 실행
 directory = '../fakeDetection/data/test'
+# directory = '../fakeAudio/test'
 results = predict_all(directory)
 save_results(results)
