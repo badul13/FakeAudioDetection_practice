@@ -3,6 +3,7 @@ import os
 import pandas as pd
 from tensorflow.keras.models import load_model
 import tensorflow as tf
+from tqdm import tqdm
 
 # GPU 설정
 gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -36,39 +37,29 @@ def load_preprocessed_test_data():
 def extract_number(filename):
     return int(filename.split('_')[1].split('.')[0])
 
-# 배치 예측 함수
-def batch_predict(audio_data_batch):
-    predictions = model.predict(audio_data_batch)
-    return predictions
+# 단일 파일 예측 함수
+def predict_single(audio_data):
+    prediction = model.predict(np.expand_dims(np.expand_dims(audio_data, axis=-1), axis=0))
+    ai_prob, human_prob = prediction[0][0], prediction[1][0]
+    return ai_prob, human_prob
 
 # 디렉토리 내 모든 파일 예측 함수
-def predict_all(directory, batch_size=2):
+def predict_all(directory):
     preprocessed_data = load_preprocessed_test_data()
     results = []
     filenames = [filename for filename in os.listdir(directory) if filename.endswith('.ogg')]
-    filenames.sort(key=extract_number)  # 파일 이름의 숫자 순서대로 정렬
-    num_files = len(filenames)
-    num_batches = (num_files + batch_size - 1) // batch_size
+    filenames.sort(key=extract_number)
 
-    for batch_idx in range(num_batches):
-        start_idx = batch_idx * batch_size
-        end_idx = min((batch_idx + 1) * batch_size, num_files)
-        batch_filenames = filenames[start_idx:end_idx]
+    for filename in tqdm(filenames, desc="Predicting"):
+        audio_data = preprocessed_data[extract_number(filename)]
+        ai_prob, human_prob = predict_single(audio_data)
 
-        audio_data_batch = np.array([preprocessed_data[extract_number(filename)] for filename in batch_filenames])
-        audio_data_batch = np.expand_dims(audio_data_batch, axis=-1)
-        predictions = batch_predict(audio_data_batch)
-
-        # 각 파일에 대해 예측 결과 저장
-        for filename, prediction in zip(batch_filenames, predictions):
-            ai_prob = float(prediction[0])  # 모델의 예측 확률
-            human_prob = float(prediction[1])  # 모델의 사람 확률
-            result = {
-                'filename': filename,
-                'fake': ai_prob,
-                'real': human_prob
-            }
-            results.append(result)
+        result = {
+            'id': filename.split('.')[0],
+            'fake': float(ai_prob),
+            'real': float(human_prob)
+        }
+        results.append(result)
 
     return results
 
