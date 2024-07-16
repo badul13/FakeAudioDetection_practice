@@ -77,17 +77,17 @@ class CNNHyperModel(HyperModel):
     def build(self, hp):
         audio_input = Input(shape=(16000, 1))
         x = Conv1D(filters=hp.Int('filters_1', min_value=16, max_value=64, step=16),
-                   kernel_size=hp.Choice('kernel_size_1', values=[3, 4, 5]), activation='relu')(audio_input)
+                   kernel_size=hp.Choice('kernel_size_1', values=[3,4,5]), activation='relu')(audio_input)
         x = MaxPooling1D(2)(x)
         x = Dropout(0.2)(x)
 
-        x = Conv1D(filters=hp.Int('filters_2', min_value=64, max_value=128, step=64),
-                   kernel_size=hp.Choice('kernel_size_2', values=[3, 4, 5]), activation='relu')(x)
+        x = Conv1D(filters=hp.Int('filters_2', min_value=64, max_value=128, step=32),
+                   kernel_size=hp.Choice('kernel_size_2', values=[3,4,5]), activation='relu')(x)
         x = MaxPooling1D(2)(x)
         x = Dropout(0.2)(x)
 
         x = Conv1D(filters=hp.Int('filters_3', min_value=32, max_value=128, step=32),
-                   kernel_size=hp.Choice('kernel_size_3', values=[3, 4, 5]), activation='relu')(x)
+                   kernel_size=hp.Choice('kernel_size_3', values=[3,4,5]), activation='relu')(x)
         x = MaxPooling1D(2)(x)
         x = Dropout(0.2)(x)
 
@@ -122,10 +122,10 @@ tuner = RandomSearch(
     executions_per_trial=2,
     directory='hyperparam_tuning_cnn',
 )
-tuner.search(train_generator, epochs=5, validation_data=train_generator.get_validation_data(),
+tuner.search(train_generator, epochs=4, validation_data=train_generator.get_validation_data(),
              callbacks=[
-                 # ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=1e-6, verbose=1),
-                 # EarlyStopping(monitor='val_loss', patience=10, verbose=1, restore_best_weights=True),
+                 ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=1e-6, verbose=1),
+                 EarlyStopping(monitor='val_loss', patience=10, verbose=1, restore_best_weights=True),
                  ModelCheckpoint(filepath='final_model.keras', monitor='val_loss', save_best_only=True, save_freq='epoch')
              ])
 best_model = tuner.get_best_models(num_models=1)[0]

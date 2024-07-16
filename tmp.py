@@ -13,12 +13,12 @@ def load_audio_data(audio_path, target_sr=16000):
 # 오디오 데이터를 증강하는 함수
 def augment_audio(audio_data):
     # 시간 축소
-    time_stretch = librosa.effects.time_stretch(audio_data, rate=np.random.uniform(0.8, 1.2))
+    time_stretch = librosa.effects.time_stretch(audio_data, rate=np.random.uniform(0.85, 1.15))
     # 노이즈 추가
     noise = np.random.randn(len(audio_data))
     audio_data_noise = audio_data + 0.005 * noise
     # 피치 변환
-    pitch_shift = librosa.effects.pitch_shift(audio_data, sr=16000, n_steps=np.random.randint(-5, 5))
+    pitch_shift = librosa.effects.pitch_shift(audio_data, sr=16000, n_steps=np.random.randint(-3, 3))
     return [time_stretch, audio_data_noise, pitch_shift]
 
 # 오디오 데이터를 패딩하거나 트리밍하는 함수
@@ -59,10 +59,9 @@ def process_and_save_batch(df_batch, base_path, target_sr, max_len, augment, dat
             file_path = os.path.join(base_path, row['path'].strip('./'))
 
         audio_data, sr = load_audio_data(file_path, target_sr)
-        audio_data = pad_or_trim(audio_data, max_len)
-
         # 밴드 패스 필터 적용
         audio_data = bandpass_filter(audio_data, lowcut, highcut, target_sr)
+        audio_data = pad_or_trim(audio_data, max_len)
 
         data.append(audio_data)
         if labels_file is not None:  # 테스트 데이터는 라벨이 없음
@@ -97,12 +96,35 @@ base_path = '../fakeDetection/data'
 train_csv_path = '../fakeDetection/data/train.csv'
 test_base_path = '../fakeDetection/data/test_nonBack'
 test_csv_path = '../fakeDetection/data/test.csv'
-train_data_file = 'data.npy'
-train_labels_file = 'labels.npy'
-test_data_file = 'test_data.npy'
+train_data_file = 'data_0716.npy'
+train_labels_file = 'labels_0716.npy'
+test_data_file = 'test_data_0716.npy'
 
+# 기존 파일 삭제 (새로운 처리 시작)
+if os.path.exists(train_data_file):
+    os.remove(train_data_file)
+if os.path.exists(train_labels_file):
+    os.remove(train_labels_file)
 if os.path.exists(test_data_file):
     os.remove(test_data_file)
+
+# 학습 데이터 전처리
+df = pd.read_csv(train_csv_path)
+batch_size = 1000
+total_files = len(df)
+total_processed = 0
+
+print(f"Total train files to process: {total_files}")
+
+for i in tqdm(range(0, len(df), batch_size), desc="Processing train batches", unit="batch"):
+    df_batch = df.iloc[i:i + batch_size]
+    total_processed = process_and_save_batch(df_batch, base_path, target_sr=16000, max_len=16000,
+                                             augment=False, data_file=train_data_file, labels_file=train_labels_file,
+                                             total_processed=total_processed)
+    percent_complete = (total_processed / total_files) * 100
+    print(f'\rProgress: {percent_complete:.2f}% ({total_processed}/{total_files} files)', end='')
+
+print('\nTrain preprocessing finished.')
 
 # 테스트 데이터 전처리
 df_test = pd.read_csv(test_csv_path)
