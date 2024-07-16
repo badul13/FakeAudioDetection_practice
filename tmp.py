@@ -13,12 +13,12 @@ def load_audio_data(audio_path, target_sr=16000):
 # 오디오 데이터를 증강하는 함수
 def augment_audio(audio_data):
     # 시간 축소
-    time_stretch = librosa.effects.time_stretch(audio_data, rate=np.random.uniform(0.85, 1.15))
+    time_stretch = librosa.effects.time_stretch(audio_data, rate=np.random.uniform(0.8, 1.2))
     # 노이즈 추가
     noise = np.random.randn(len(audio_data))
     audio_data_noise = audio_data + 0.005 * noise
     # 피치 변환
-    pitch_shift = librosa.effects.pitch_shift(audio_data, sr=16000, n_steps=np.random.randint(-3, 3))
+    pitch_shift = librosa.effects.pitch_shift(audio_data, sr=16000, n_steps=np.random.randint(-5, 5))
     return [time_stretch, audio_data_noise, pitch_shift]
 
 # 오디오 데이터를 패딩하거나 트리밍하는 함수
@@ -59,7 +59,6 @@ def process_and_save_batch(df_batch, base_path, target_sr, max_len, augment, dat
             file_path = os.path.join(base_path, row['path'].strip('./'))
 
         audio_data, sr = load_audio_data(file_path, target_sr)
-        # 밴드 패스 필터 적용
         audio_data = bandpass_filter(audio_data, lowcut, highcut, target_sr)
         audio_data = pad_or_trim(audio_data, max_len)
 
@@ -119,7 +118,7 @@ print(f"Total train files to process: {total_files}")
 for i in tqdm(range(0, len(df), batch_size), desc="Processing train batches", unit="batch"):
     df_batch = df.iloc[i:i + batch_size]
     total_processed = process_and_save_batch(df_batch, base_path, target_sr=16000, max_len=16000,
-                                             augment=False, data_file=train_data_file, labels_file=train_labels_file,
+                                             augment=True, data_file=train_data_file, labels_file=train_labels_file,
                                              total_processed=total_processed)
     percent_complete = (total_processed / total_files) * 100
     print(f'\rProgress: {percent_complete:.2f}% ({total_processed}/{total_files} files)', end='')

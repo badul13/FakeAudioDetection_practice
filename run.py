@@ -73,32 +73,64 @@ class DataGenerator(Sequence):
             return None, None
 
 
+# class CNNHyperModel(HyperModel):
+#     def build(self, hp):
+#         audio_input = Input(shape=(16000, 1))
+#         x = Conv1D(filters=hp.Int('filters_1', min_value=16, max_value=64, step=16),
+#                    kernel_size=hp.Choice('kernel_size_1', values=[3,4,5]), activation='relu')(audio_input)
+#         x = MaxPooling1D(2)(x)
+#         x = Dropout(0.2)(x)
+#
+#         x = Conv1D(filters=hp.Int('filters_2', min_value=64, max_value=128, step=32),
+#                    kernel_size=hp.Choice('kernel_size_2', values=[3,4,5]), activation='relu')(x)
+#         x = MaxPooling1D(2)(x)
+#         x = Dropout(0.2)(x)
+#
+#         x = Conv1D(filters=hp.Int('filters_3', min_value=32, max_value=128, step=32),
+#                    kernel_size=hp.Choice('kernel_size_3', values=[3,4,5]), activation='relu')(x)
+#         x = MaxPooling1D(2)(x)
+#         x = Dropout(0.2)(x)
+#
+#         x = Flatten()(x)
+#         x = Dense(units=hp.Int('units', min_value=128, max_value=512, step=128), activation='relu')(x)
+#         x = Dropout(0.5)(x)
+#         ai_output = Dense(1, activation='sigmoid', name='ai_output')(x)
+#         human_output = Dense(1, activation='sigmoid', name='human_output')(x)
+#
+#         model = Model(inputs=audio_input, outputs=[ai_output, human_output])
+#         model.compile(optimizer=Adam(hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])),
+#                       loss={'ai_output': 'binary_crossentropy', 'human_output': 'binary_crossentropy'},
+#                       metrics={'ai_output': 'accuracy', 'human_output': 'accuracy'})
+#
+#         print("Building CNN model...")
+#         return model
+
 class CNNHyperModel(HyperModel):
     def build(self, hp):
         audio_input = Input(shape=(16000, 1))
-        x = Conv1D(filters=hp.Int('filters_1', min_value=16, max_value=64, step=16),
-                   kernel_size=hp.Choice('kernel_size_1', values=[3,4,5]), activation='relu')(audio_input)
+        x = Conv1D(filters=hp.Int('filters_1', min_value=16, max_value=16, step=16),
+                   kernel_size=hp.Choice('kernel_size_1', values=[5]), activation='relu')(audio_input)
         x = MaxPooling1D(2)(x)
         x = Dropout(0.2)(x)
 
-        x = Conv1D(filters=hp.Int('filters_2', min_value=64, max_value=128, step=32),
-                   kernel_size=hp.Choice('kernel_size_2', values=[3,4,5]), activation='relu')(x)
+        x = Conv1D(filters=hp.Int('filters_2', min_value=64, max_value=64, step=32),
+                   kernel_size=hp.Choice('kernel_size_2', values=[4]), activation='relu')(x)
         x = MaxPooling1D(2)(x)
         x = Dropout(0.2)(x)
 
-        x = Conv1D(filters=hp.Int('filters_3', min_value=32, max_value=128, step=32),
-                   kernel_size=hp.Choice('kernel_size_3', values=[3,4,5]), activation='relu')(x)
+        x = Conv1D(filters=hp.Int('filters_3', min_value=32, max_value=32, step=32),
+                   kernel_size=hp.Choice('kernel_size_3', values=[4]), activation='relu')(x)
         x = MaxPooling1D(2)(x)
         x = Dropout(0.2)(x)
 
         x = Flatten()(x)
-        x = Dense(units=hp.Int('units', min_value=128, max_value=512, step=128), activation='relu')(x)
+        x = Dense(units=hp.Int('units', min_value=512, max_value=512, step=128), activation='relu')(x)
         x = Dropout(0.5)(x)
         ai_output = Dense(1, activation='sigmoid', name='ai_output')(x)
         human_output = Dense(1, activation='sigmoid', name='human_output')(x)
 
         model = Model(inputs=audio_input, outputs=[ai_output, human_output])
-        model.compile(optimizer=Adam(hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])),
+        model.compile(optimizer=Adam(hp.Choice('learning_rate', values=[0.001])),
                       loss={'ai_output': 'binary_crossentropy', 'human_output': 'binary_crossentropy'},
                       metrics={'ai_output': 'accuracy', 'human_output': 'accuracy'})
 
@@ -118,7 +150,7 @@ print(f"Starting hyperparameter search for CNNHyperModel...")
 tuner = RandomSearch(
     CNNHyperModel(),
     objective=Objective('val_ai_output_accuracy', direction='max'),
-    max_trials=7,
+    max_trials=1,
     executions_per_trial=2,
     directory='hyperparam_tuning_cnn_0716',
 )
