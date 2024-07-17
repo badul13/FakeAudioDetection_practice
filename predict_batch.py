@@ -18,12 +18,12 @@ if gpus:
         print(e)
 
 # 저장된 모델 로드
-model_path = 'final_model.keras'
+model_path = 'final_model_0717.keras'
 model = load_model(model_path)
 print(f'Model loaded from {model_path}')
 
 # 전처리된 테스트 데이터 파일 경로
-test_data_file = 'test_data_0716.npy'
+test_data_file = 'test_data_0717.npy'
 
 # 전처리된 데이터를 불러오는 함수
 def load_preprocessed_test_data():

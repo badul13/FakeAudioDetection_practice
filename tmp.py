@@ -47,8 +47,8 @@ def bandpass_filter(data, lowcut, highcut, fs, order=5):
 def process_and_save_batch(df_batch, base_path, target_sr, max_len, augment, data_file, labels_file, total_processed):
     data = []
     labels = []
-    lowcut = 20.0
-    highcut = 2000.0
+    lowcut = 100.0
+    highcut = 1500.0
 
     for _, row in df_batch.iterrows():
         # 파일 경로 생성 수정
@@ -95,9 +95,9 @@ base_path = '../fakeDetection/data'
 train_csv_path = '../fakeDetection/data/train.csv'
 test_base_path = '../fakeDetection/data/test_nonBack'
 test_csv_path = '../fakeDetection/data/test.csv'
-train_data_file = 'data_0716.npy'
-train_labels_file = 'labels_0716.npy'
-test_data_file = 'test_data_0716.npy'
+train_data_file = 'data_0717.npy'
+train_labels_file = 'labels_0717.npy'
+test_data_file = 'test_data_0717.npy'
 
 # 기존 파일 삭제 (새로운 처리 시작)
 if os.path.exists(train_data_file):
@@ -118,7 +118,7 @@ print(f"Total train files to process: {total_files}")
 for i in tqdm(range(0, len(df), batch_size), desc="Processing train batches", unit="batch"):
     df_batch = df.iloc[i:i + batch_size]
     total_processed = process_and_save_batch(df_batch, base_path, target_sr=16000, max_len=16000,
-                                             augment=True, data_file=train_data_file, labels_file=train_labels_file,
+                                             augment=False, data_file=train_data_file, labels_file=train_labels_file,
                                              total_processed=total_processed)
     percent_complete = (total_processed / total_files) * 100
     print(f'\rProgress: {percent_complete:.2f}% ({total_processed}/{total_files} files)', end='')
