@@ -135,7 +135,7 @@ class CNNHyperModel(HyperModel):
         human_output = Dense(1, activation='sigmoid', name='human_output')(x)
 
         model = Model(inputs=audio_input, outputs=[ai_output, human_output])
-        model.compile(optimizer=Adam(hp.Choice('learning_rate', values=[0.001])),
+        model.compile(optimizer=Adam(hp.Choice('learning_rate', values=[0.0001])),
                       loss={'ai_output': 'binary_crossentropy', 'human_output': 'binary_crossentropy'},
                       metrics={'ai_output': 'accuracy', 'human_output': 'accuracy'})
 
@@ -157,13 +157,13 @@ tuner = RandomSearch(
     objective=Objective('val_ai_output_accuracy', direction='max'),
     max_trials=1,
     executions_per_trial=1,
-    directory='hyperparam_tuning_cnn_0717_2',
+    directory='hyperparam_tuning_cnn_0717_3',
 )
-tuner.search(train_generator, epochs=4, validation_data=train_generator.get_validation_data(),
+tuner.search(train_generator, epochs=10, validation_data=train_generator.get_validation_data(),
              callbacks=[
                  ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=1e-6, verbose=1),
                  EarlyStopping(monitor='val_loss', patience=10, verbose=1, restore_best_weights=True),
-                 ModelCheckpoint(filepath='final_model_0717_2.keras', monitor='val_loss', save_best_only=True, save_freq='epoch')
+                 ModelCheckpoint(filepath='final_model_0717_3.keras', monitor='val_loss', save_best_only=True, save_freq='epoch')
              ])
 best_model = tuner.get_best_models(num_models=1)[0]
-best_model.save('final_model_0717_2.keras')
+best_model.save('final_model_0717_3.keras')
