@@ -128,6 +128,16 @@ class CNNHyperModel(HyperModel):
         x = MaxPooling1D(2)(x)
         x = Dropout(0.2)(x)
 
+        x = Conv1D(filters=hp.Int('filters_4', min_value=32, max_value=32, step=32),
+                   kernel_size=hp.Choice('kernel_size_4', values=[4]), activation='relu')(x)
+        x = MaxPooling1D(2)(x)
+        x = Dropout(0.3)(x)
+
+        x = Conv1D(filters=hp.Int('filters_5', min_value=32, max_value=32, step=32),
+                   kernel_size=hp.Choice('kernel_size_5', values=[4]), activation='relu')(x)
+        x = MaxPooling1D(2)(x)
+        x = Dropout(0.3)(x)
+
         x = Flatten()(x)
         x = Dense(units=hp.Int('units', min_value=512, max_value=512, step=128), activation='relu')(x)
         x = Dropout(0.5)(x)
@@ -135,7 +145,7 @@ class CNNHyperModel(HyperModel):
         human_output = Dense(1, activation='sigmoid', name='human_output')(x)
 
         model = Model(inputs=audio_input, outputs=[ai_output, human_output])
-        model.compile(optimizer=Adam(hp.Choice('learning_rate', values=[0.0001])),
+        model.compile(optimizer=Adam(hp.Choice('learning_rate', values=[0.001])),
                       loss={'ai_output': 'binary_crossentropy', 'human_output': 'binary_crossentropy'},
                       metrics={'ai_output': 'accuracy', 'human_output': 'accuracy'})
 
@@ -144,8 +154,8 @@ class CNNHyperModel(HyperModel):
 
 
 # 데이터 파일 경로
-data_file = 'data.npy'
-labels_file = 'labels.npy'
+data_file = 'data_0718.npy'
+labels_file = 'labels_0718.npy'
 
 # 데이터 생성기 초기화
 train_generator = DataGenerator(data_file, labels_file, batch_size=16, is_training=True)
@@ -157,13 +167,13 @@ tuner = RandomSearch(
     objective=Objective('val_ai_output_accuracy', direction='max'),
     max_trials=1,
     executions_per_trial=1,
-    directory='hyperparam_tuning_cnn_0717_3',
+    directory='hyperparam_tuning_cnn_0718',
 )
-tuner.search(train_generator, epochs=10, validation_data=train_generator.get_validation_data(),
+tuner.search(train_generator, epochs=4, validation_data=train_generator.get_validation_data(),
              callbacks=[
                  ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=1e-6, verbose=1),
                  EarlyStopping(monitor='val_loss', patience=10, verbose=1, restore_best_weights=True),
-                 ModelCheckpoint(filepath='final_model_0717_3.keras', monitor='val_loss', save_best_only=True, save_freq='epoch')
+                 ModelCheckpoint(filepath='final_model_0718.keras', monitor='val_loss', save_best_only=True, save_freq='epoch')
              ])
 best_model = tuner.get_best_models(num_models=1)[0]
-best_model.save('final_model_0717_3.keras')
+best_model.save('final_model_0718.keras')

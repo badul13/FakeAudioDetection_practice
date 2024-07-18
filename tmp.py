@@ -13,7 +13,7 @@ def load_audio_data(audio_path, target_sr=16000):
 # 오디오 데이터를 증강하는 함수
 def augment_audio(audio_data):
     # 시간 축소
-    time_stretch = librosa.effects.time_stretch(audio_data, rate=np.random.uniform(0.8, 1.2))
+    time_stretch = librosa.effects.time_stretch(audio_data, rate=np.random.uniform(0.8, 1.0))
     # 노이즈 추가
     noise = np.random.randn(len(audio_data))
     audio_data_noise = audio_data + 0.005 * noise
@@ -95,9 +95,9 @@ base_path = '../fakeDetection/data'
 train_csv_path = '../fakeDetection/data/train.csv'
 test_base_path = '../fakeDetection/data/test_nonBack'
 test_csv_path = '../fakeDetection/data/test.csv'
-train_data_file = 'data_0717.npy'
-train_labels_file = 'labels_0717.npy'
-test_data_file = 'test_data_0717.npy'
+train_data_file = 'data_0718.npy'
+train_labels_file = 'labels_0718.npy'
+test_data_file = 'test_data_0718.npy'
 
 # 기존 파일 삭제 (새로운 처리 시작)
 if os.path.exists(train_data_file):
@@ -118,7 +118,7 @@ print(f"Total train files to process: {total_files}")
 for i in tqdm(range(0, len(df), batch_size), desc="Processing train batches", unit="batch"):
     df_batch = df.iloc[i:i + batch_size]
     total_processed = process_and_save_batch(df_batch, base_path, target_sr=16000, max_len=16000,
-                                             augment=False, data_file=train_data_file, labels_file=train_labels_file,
+                                             augment=True, data_file=train_data_file, labels_file=train_labels_file,
                                              total_processed=total_processed)
     percent_complete = (total_processed / total_files) * 100
     print(f'\rProgress: {percent_complete:.2f}% ({total_processed}/{total_files} files)', end='')
