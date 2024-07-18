@@ -43,7 +43,8 @@ def predict_single(audio_data):
     audio_data = np.expand_dims(audio_data, axis=0)
     audio_data = np.expand_dims(audio_data, axis=-1)
     ai_prob, human_prob = model.predict(audio_data)
-    return expit(ai_prob[0]), expit(human_prob[0])
+    return expit(ai_prob[0]), human_prob[0]
+    # return expit(ai_prob[0]), expit(human_prob[0])
 
 # 디렉토리 내 모든 파일 예측 함수
 def predict_all(directory):
@@ -65,7 +66,7 @@ def predict_all(directory):
     return results
 
 # 결과를 저장하는 함수
-def save_results(results, output_file='../fakeAudio/sample_submission_3.csv'):
+def save_results(results, output_file='../fakeAudio/tmp.csv'):
     df = pd.DataFrame(results)
     df.to_csv(output_file, index=False)
     print(f'Results saved to {output_file}')
