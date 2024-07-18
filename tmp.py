@@ -118,7 +118,7 @@ print(f"Total train files to process: {total_files}")
 for i in tqdm(range(0, len(df), batch_size), desc="Processing train batches", unit="batch"):
     df_batch = df.iloc[i:i + batch_size]
     total_processed = process_and_save_batch(df_batch, base_path, target_sr=16000, max_len=16000,
-                                             augment=True, data_file=train_data_file, labels_file=train_labels_file,
+                                             augment=False, data_file=train_data_file, labels_file=train_labels_file,
                                              total_processed=total_processed)
     percent_complete = (total_processed / total_files) * 100
     print(f'\rProgress: {percent_complete:.2f}% ({total_processed}/{total_files} files)', end='')
